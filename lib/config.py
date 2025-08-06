@@ -5,8 +5,17 @@ import configparser
 
 def configure_api():
     """Memuat variabel .env dan mengkonfigurasi API key Gemini."""
+    # Coba load .env dari current directory dulu
     load_dotenv()
     api_key = os.getenv("GANAI_API_KEY")
+    
+    # Jika tidak ada, coba dari script directory
+    if not api_key:
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        env_path = os.path.join(script_dir, '.env')
+        load_dotenv(env_path)
+        api_key = os.getenv("GANAI_API_KEY")
+    
     if not api_key:
         raise ValueError("GANAI_API_KEY tidak ditemukan di file .env. Silakan buat file .env dan tambahkan kunci Anda.")
     genai.configure(api_key=api_key)
@@ -20,9 +29,17 @@ def load_app_config(config_path):
     config = configparser.ConfigParser()
 
     if not os.path.exists(config_path):
-        # Ini bukan error, karena nilai default akan digunakan. Cukup informasikan.
-        print(f"ℹ️  File konfigurasi '{config_path}' tidak ditemukan, menggunakan nilai default.")
-        return {}
+        # Coba cari dari script directory
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        alternative_config_path = os.path.join(script_dir, config_path)
+        
+        if os.path.exists(alternative_config_path):
+            config_path = alternative_config_path
+            print(f"ℹ️  File konfigurasi ditemukan di: {config_path}")
+        else:
+            # Ini bukan error, karena nilai default akan digunakan. Cukup informasikan.
+            print(f"ℹ️  File konfigurasi '{config_path}' tidak ditemukan, menggunakan nilai default.")
+            return {}
 
     try:
         config.read(config_path)

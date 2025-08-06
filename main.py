@@ -98,6 +98,26 @@ def main():
                 create_pr_flow(diff_for_pr, commit_msg_for_pr, current_branch, args)
             else:
                 print("ℹ️ Langkah 'pull request' dilewati.")
+        elif 'pr' in steps:
+            # --- Jalur 3: Hanya ingin membuat PR untuk branch yang sudah ada ---
+            print("ℹ️ Tidak ada perubahan baru atau commit yang belum di-push.")
+            print("ℹ️ Mencoba membuat PR untuk branch saat ini terhadap target branch...")
+            
+            # Cek apakah ada perbedaan dengan target branch
+            diff_for_pr = git_utils.get_diff_against_branch(args.target_branch)
+            commits_info = git_utils.get_commits_against_branch(args.target_branch)
+            
+            if not diff_for_pr and not commits_info:
+                print(f"ℹ️ Tidak ada perbedaan antara branch saat ini dan '{args.target_branch}'.")
+                print("   Tidak ada yang perlu di-PR.")
+                return
+            
+            # Gunakan commit terakhir sebagai judul PR
+            commit_msg_for_pr = git_utils.get_last_commit_message()
+            if not commit_msg_for_pr:
+                commit_msg_for_pr = f"PR: {current_branch} to {args.target_branch}"
+            
+            create_pr_flow(diff_for_pr, commit_msg_for_pr, current_branch, args)
         return # Selesai, karena tidak ada perubahan baru untuk di-commit
 
     # --- Langkah C: Commit ---

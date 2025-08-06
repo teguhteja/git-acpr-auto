@@ -50,6 +50,30 @@ def get_diff_for_unpushed_commits():
         # Terjadi jika upstream tidak di-set atau tidak ada perbedaan.
         return None
 
+def get_diff_against_branch(target_branch):
+    """Mendapatkan diff dari branch saat ini terhadap target branch."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", f"{target_branch}...HEAD"],
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error saat mendapatkan diff terhadap branch {target_branch}: {e.stderr}")
+        return None
+
+def get_commits_against_branch(target_branch):
+    """Mendapatkan daftar commit dari branch saat ini yang tidak ada di target branch."""
+    try:
+        result = subprocess.run(
+            ["git", "log", f"{target_branch}..HEAD", "--oneline"],
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error saat mendapatkan commits terhadap branch {target_branch}: {e.stderr}")
+        return None
+
 def git_add():
     """Menambahkan semua perubahan ke staging area (`git add .`)."""
     print("Menambahkan semua perubahan ke staging area (`git add .`)...")
