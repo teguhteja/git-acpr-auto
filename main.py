@@ -181,8 +181,8 @@ def save_commit_diff(diff, folder_diff):
             os.makedirs(folder_diff)
             print(f"📁 Folder '{folder_diff}' dibuat.")
         
-        # Nama file diff
-        diff_filename = f"{commit_hash}.diff"
+        # Nama file diff (gunakan 8 karakter pertama dari commit hash)
+        diff_filename = f"{commit_hash[:8]}.diff"
         diff_filepath = os.path.join(folder_diff, diff_filename)
         
         # Simpan diff ke file
@@ -193,6 +193,80 @@ def save_commit_diff(diff, folder_diff):
         
     except Exception as e:
         print(f"⚠️ Gagal menyimpan diff: {e}")
+
+def get_pr_tracking_file(folder_diff):
+    """Mendapatkan path file untuk tracking diff yang sudah digunakan untuk PR"""
+    return os.path.join(folder_diff, '.pr_used_diffs.txt')
+
+def mark_diff_as_used_for_pr(diff_filename, folder_diff):
+    """Menandai diff file sebagai sudah digunakan untuk PR"""
+    try:
+        tracking_file = get_pr_tracking_file(folder_diff)
+        with open(tracking_file, 'a', encoding='utf-8') as f:
+            f.write(f"{diff_filename}\n")
+        print(f"📝 Diff {diff_filename} ditandai sebagai sudah digunakan untuk PR")
+    except Exception as e:
+        print(f"⚠️ Gagal menandai diff sebagai used: {e}")
+
+def get_used_diff_files(folder_diff):
+    """Mendapatkan daftar diff files yang sudah digunakan untuk PR"""
+    tracking_file = get_pr_tracking_file(folder_diff)
+    used_files = set()
+    
+    if os.path.exists(tracking_file):
+        try:
+            with open(tracking_file, 'r', encoding='utf-8') as f:
+                used_files = {line.strip() for line in f.readlines() if line.strip()}
+        except Exception as e:
+            print(f"⚠️ Gagal membaca tracking file: {e}")
+    
+    return used_files
+
+def collect_unused_diffs_for_pr(folder_diff, current_diff_hash=None, limit=3):
+    """Kumpulkan diff files yang belum digunakan untuk PR sebagai konteks tambahan"""
+    try:
+        if not os.path.exists(folder_diff):
+            return []
+        
+        used_files = get_used_diff_files(folder_diff)
+        
+        # Ambil semua file .diff dan filter yang belum digunakan
+        unused_diffs = []
+        for filename in os.listdir(folder_diff):
+            if filename.endswith('.diff') and filename not in used_files:
+                # Skip current diff jika ada
+                if current_diff_hash and filename.startswith(current_diff_hash[:8]):
+                    continue
+                    
+                filepath = os.path.join(folder_diff, filename)
+                mtime = os.path.getmtime(filepath)
+                unused_diffs.append((filepath, filename, mtime))
+        
+        # Urutkan berdasarkan waktu modifikasi (terbaru dulu) dan batasi
+        unused_diffs.sort(key=lambda x: x[2], reverse=True)
+        selected_diffs = unused_diffs[:limit]
+        
+        diff_contexts = []
+        for filepath, filename, _ in selected_diffs:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    diff_content = f.read()
+                    hash_part = filename.replace('.diff', '')
+                    diff_contexts.append({
+                        'filename': filename,
+                        'hash': hash_part,
+                        'content': diff_content[:1500]  # Batasi panjang untuk efisiensi prompt
+                    })
+            except Exception as e:
+                print(f"⚠️ Gagal membaca unused diff file {filepath}: {e}")
+                continue
+        
+        print(f"📋 Ditemukan {len(diff_contexts)} diff file yang belum digunakan untuk PR")
+        return diff_contexts
+        
+    except Exception as e:
+        print(f"⚠️ Error saat mengumpulkan unused diffs: {e}")
+        return []
 
 def create_pr_flow(diff, commit_message, current_branch, args):
     """Mengatur alur pembuatan Pull Request."""
@@ -208,8 +282,23 @@ def create_pr_flow(diff, commit_message, current_branch, args):
         print("Membatalkan pembuatan PR karena template tidak ditemukan.")
         return
 
-    # Gunakan AI untuk mengisi template
-    final_pr_body = ai_utils.generate_pr_body(diff, args.model, commit_message, template_content)
+    # Dapatkan hash commit saat ini untuk tracking
+    current_commit_hash = git_utils.get_last_commit_hash()
+    
+    # Kumpulkan diff files yang belum digunakan untuk PR
+    print("📋 Mengumpulkan diff files yang belum digunakan untuk PR...")
+    unused_diffs = collect_unused_diffs_for_pr(args.folder_diff, current_commit_hash, limit=3)
+    
+    # Gunakan AI untuk mengisi template dengan strict adherence dan unused diffs
+    final_pr_body = ai_utils.generate_strict_template_pr_body(
+        diff, args.model, commit_message, template_content, unused_diffs
+    )
+    
+    # Fallback ke metode lama jika fungsi baru tidak tersedia
+    if not final_pr_body:
+        print("⚠️ Menggunakan metode standar untuk membuat PR body...")
+        final_pr_body = ai_utils.generate_pr_body(diff, args.model, commit_message, template_content)
+    
     if not final_pr_body:
         print("Gagal membuat deskripsi PR. Membatalkan pembuatan PR.")
         return
@@ -235,7 +324,18 @@ def create_pr_flow(diff, commit_message, current_branch, args):
         return
 
     # Buat Pull Request
-    git_utils.create_pull_request(args.target_branch, pr_title, final_pr_body)
+    pr_success = git_utils.create_pull_request(args.target_branch, pr_title, final_pr_body)
+    
+    # Tandai diff files sebagai sudah digunakan untuk PR jika berhasil
+    if pr_success:
+        # Mark current commit's diff as used
+        if current_commit_hash:
+            current_diff_filename = f"{current_commit_hash[:8]}.diff"
+            mark_diff_as_used_for_pr(current_diff_filename, args.folder_diff)
+        
+        # Mark unused diffs that were used in PR context as used
+        for unused_diff in unused_diffs:
+            mark_diff_as_used_for_pr(unused_diff['filename'], args.folder_diff)
 
 if __name__ == "__main__":
     main()
