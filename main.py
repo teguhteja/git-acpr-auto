@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from lib import ai_utils, config, git_utils, utils
 
@@ -30,6 +31,8 @@ def main():
     default_model = app_config.get('model', 'gemini-1.5-flash-latest')
     default_pr_branch = app_config.get('branch-pr', 'develop')
     default_pr_template = app_config.get('pr-template', 'prompt/pull_request_template.md')
+    default_auto_save_diff = app_config.get('auto-save-diff', 'false').lower() == 'true'
+    default_folder_diff = app_config.get('folder-diff', 'diff')
 
     # Parser utama yang menggunakan nilai default dari konfigurasi
     parser = argparse.ArgumentParser(
@@ -41,7 +44,9 @@ def main():
     parser.add_argument("-m", "--model", type=str, default=default_model, help=f"Nama model Gemini. Default: {default_model}")
     parser.add_argument("--target-branch", type=str, default=default_pr_branch, help=f"Branch target untuk Pull Request. Default: {default_pr_branch}")
     parser.add_argument("--pr-template", type=str, default=default_pr_template, help=f"Path ke template Pull Request. Default: {default_pr_template}")
-    parser.add_argument("--steps", type=str, default="acpr", help="Langkah yang akan dijalankan: a(add), c(commit), p(push), pr(pull request). Contoh: 'acp'. Default: 'acpr'")
+    parser.add_argument("--auto-save-diff", action="store_true", default=default_auto_save_diff, help=f"Simpan diff commit ke file. Default: {default_auto_save_diff}")
+    parser.add_argument("--folder-diff", type=str, default=default_folder_diff, help=f"Folder untuk menyimpan file diff. Default: {default_folder_diff}")
+    parser.add_argument("--steps", type=str, default="acp", help="Langkah yang akan dijalankan: a(add), c(commit), p(push), pr(pull request). Contoh: 'acp'. Default: 'acp'")
     args = parser.parse_args(remaining_argv)
 
     # --- PENGECEKAN UKURAN FOLDER ---
@@ -141,6 +146,10 @@ def main():
 
         if not git_utils.git_commit(commit_message):
             return # Gagal commit
+        
+        # Simpan diff jika auto-save-diff diaktifkan
+        if args.auto_save_diff:
+            save_commit_diff(diff, args.folder_diff)
     else:
         print("ℹ️ Langkah 'commit' dilewati. Perubahan baru tidak akan di-push atau di-PR-kan.")
         return
@@ -157,6 +166,33 @@ def main():
         create_pr_flow(diff, commit_message, current_branch, args)
     else:
         print("ℹ️ Langkah 'pull request' dilewati.")
+
+def save_commit_diff(diff, folder_diff):
+    """Simpan diff commit ke file dengan nama COMMIT_HASH.diff"""
+    try:
+        # Dapatkan hash commit terakhir
+        commit_hash = git_utils.get_last_commit_hash()
+        if not commit_hash:
+            print("⚠️ Tidak dapat mendapatkan hash commit, diff tidak disimpan.")
+            return
+        
+        # Buat folder jika belum ada
+        if not os.path.exists(folder_diff):
+            os.makedirs(folder_diff)
+            print(f"📁 Folder '{folder_diff}' dibuat.")
+        
+        # Nama file diff
+        diff_filename = f"{commit_hash}.diff"
+        diff_filepath = os.path.join(folder_diff, diff_filename)
+        
+        # Simpan diff ke file
+        with open(diff_filepath, 'w', encoding='utf-8') as f:
+            f.write(diff)
+        
+        print(f"💾 Diff commit disimpan ke: {diff_filepath}")
+        
+    except Exception as e:
+        print(f"⚠️ Gagal menyimpan diff: {e}")
 
 def create_pr_flow(diff, commit_message, current_branch, args):
     """Mengatur alur pembuatan Pull Request."""

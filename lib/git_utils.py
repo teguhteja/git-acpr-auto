@@ -36,6 +36,15 @@ def get_last_commit_message():
         print(f"❌ Error saat mendapatkan pesan commit terakhir: {e.stderr}")
         return None
 
+def get_last_commit_hash():
+    """Mendapatkan hash dari commit terakhir."""
+    try:
+        result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error saat mendapatkan hash commit terakhir: {e.stderr}")
+        return None
+
 def get_diff_for_unpushed_commits():
     """Mendapatkan diff dari semua commit yang belum di-push."""
     try:
