@@ -141,7 +141,7 @@ def git_push(branch_name):
     print(result.stdout)
     return True
 
-def create_pull_request(target_branch, title, body):
+def create_pull_request(target_branch, title, body, reviewer=None):
     """Membuat Pull Request menggunakan GitHub CLI ('gh')."""
     if not shutil.which("gh"):
         print("❌ Error: GitHub CLI ('gh') tidak ditemukan. Fungsionalitas PR tidak dapat berjalan.")
@@ -155,6 +155,12 @@ def create_pull_request(target_branch, title, body):
         "--title", title,
         "--body", body
     ]
+    
+    # Tambahkan reviewer jika disediakan
+    if reviewer and reviewer.strip():
+        command.extend(["--reviewer", reviewer.strip()])
+        print(f"ℹ️ Reviewer akan diset ke: {reviewer.strip()}")
+    
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         print("❌ Error saat membuat Pull Request:")

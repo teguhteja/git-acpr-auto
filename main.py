@@ -33,6 +33,7 @@ def main():
     default_pr_template = app_config.get('pr-template', 'prompt/pull_request_template.md')
     default_auto_save_diff = app_config.get('auto-save-diff', 'false').lower() == 'true'
     default_folder_diff = app_config.get('folder-diff', 'diff')
+    default_reviewer = app_config.get('reviewer', '')
 
     # Parser utama yang menggunakan nilai default dari konfigurasi
     parser = argparse.ArgumentParser(
@@ -46,6 +47,7 @@ def main():
     parser.add_argument("--pr-template", type=str, default=default_pr_template, help=f"Path ke template Pull Request. Default: {default_pr_template}")
     parser.add_argument("--auto-save-diff", action="store_true", default=default_auto_save_diff, help=f"Simpan diff commit ke file. Default: {default_auto_save_diff}")
     parser.add_argument("--folder-diff", type=str, default=default_folder_diff, help=f"Folder untuk menyimpan file diff. Default: {default_folder_diff}")
+    parser.add_argument("--reviewer", type=str, default=default_reviewer, help=f"Username GitHub untuk reviewer PR. Default: {default_reviewer}")
     parser.add_argument("--steps", type=str, default="acp", help="Langkah yang akan dijalankan: a(add), c(commit), p(push), pr(pull request). Contoh: 'acp'. Default: 'acp'")
     args = parser.parse_args(remaining_argv)
 
@@ -324,7 +326,7 @@ def create_pr_flow(diff, commit_message, current_branch, args):
         return
 
     # Buat Pull Request
-    pr_success = git_utils.create_pull_request(args.target_branch, pr_title, final_pr_body)
+    pr_success = git_utils.create_pull_request(args.target_branch, pr_title, final_pr_body, args.reviewer)
     
     # Tandai diff files sebagai sudah digunakan untuk PR jika berhasil
     if pr_success:
